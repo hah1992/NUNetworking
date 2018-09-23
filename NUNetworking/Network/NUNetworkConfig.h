@@ -22,7 +22,6 @@
 
 /**
  *  每个Host的最大连接数
- *  默认为2
  */
 @property (nonatomic, assign) NSUInteger maxHttpConnectionPerHost;
 

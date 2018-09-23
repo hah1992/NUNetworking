@@ -71,6 +71,12 @@ typedef NS_ENUM(NSUInteger, NUSSLPinningMode) {
     NUSSLPinningModeCertificate,
 };
 
+typedef NS_ENUM(NSInteger, NUNetworkError) {
+    NUNetworkCancelUnknown = -1,
+    NUNetworkJSONError = 1230001,
+    
+};
+
 // 默认的请求超时时间
 #define NU_API_REQUEST_TIME_OUT 30
 #define MAX_HTTP_CONNECTION_PER_HOST 5

@@ -246,7 +246,7 @@ typedef void (^NUAPIProgressHandler)(NSProgress * _Nullable progress);
  *
  */
 - (void)startWithSuccess:(_Nonnull NUAPISuccessHandler)success
-                             failure:(_Nonnull NUAPIFailHandler)failure;
+                 failure:(_Nonnull NUAPIFailHandler)failure;
 
 /**
  *  开始网络请求，并传入成功和失败回调方法
@@ -257,8 +257,8 @@ typedef void (^NUAPIProgressHandler)(NSProgress * _Nullable progress);
  *
  */
 - (void)startWithSuccess:(_Nonnull NUAPISuccessHandler)success
-                             failure:(_Nonnull NUAPIFailHandler)failure
-                            progress:(_Nullable NUAPIProgressHandler)progress;
+                 failure:(_Nonnull NUAPIFailHandler)failure
+                progress:(_Nullable NUAPIProgressHandler)progress;
 
 /**
  *  取消网络请求
@@ -283,25 +283,25 @@ typedef void (^NUAPIProgressHandler)(NSProgress * _Nullable progress);
 /**
  *  开启下载任务的简便方法
  *
- *  @param downloadCompletion 下载成功回调block
- *  @param downloadfailed     下载失败回调block
+ *  @param downloadSuccess 下载成功回调block
+ *  @param downloadFailed     下载失败回调block
  *  @param progress           下载进度回调block
  */
-- (void)startDownloadTaskWithSuccessHandler:(nullable NUAPISuccessHandler)downloadSuccess
-                              failedHandler:(nullable NUAPIFailHandler)downloadFailed
-                                   progress:(nullable NUAPIProgressHandler)progress;
+- (void)downloadWithSuccess:(nullable NUAPISuccessHandler)downloadSuccess
+                    failure:(nullable NUAPIFailHandler)downloadFailed
+                   progress:(nullable NUAPIProgressHandler)progress;
 
 /**
  *  开启上传任务的简便方法
  *
- *  @param downloadCompletion 上传成功回调block
- *  @param downloadfailed     上传失败回调block
+ *  @param downloadSuccess 上传成功回调block
+ *  @param downloadFailed     上传失败回调block
  *  @param progress           上传进度回调block
  */
-- (void)startUploadTaskWithSuccessHandler:(nullable NUAPISuccessHandler)downloadSuccess
-                            failedHandler:(nullable NUAPIFailHandler)downloadFailed
-                                 progress:(nullable NUAPIProgressHandler)progress;
-								 
+- (void)uploadWithSuccess:(nullable NUAPISuccessHandler)downloadSuccess
+                  failure:(nullable NUAPIFailHandler)downloadFailed
+                 progress:(nullable NUAPIProgressHandler)progress;
+
 #pragma mark - Transform
 /**
  *  从网络获得的原始数据转换成符合UI/Model层需要的数据结构
@@ -311,7 +311,7 @@ typedef void (^NUAPIProgressHandler)(NSProgress * _Nullable progress);
  *
  *  @return 转换完成的数据对象
  */
-- (nullable id)apiResponseObjReformer:(id _Nullable)responseObject andError:(NSError * _Nullable)error;
+- (nullable id)responseObjReformer:(id _Nullable)responseObject andError:(NSError * _Nullable)error;
 
 
 /**

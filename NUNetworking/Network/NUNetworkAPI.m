@@ -9,9 +9,8 @@
 #import "NUNetworkAPI.h"
 #import "NUNetworkAgent.h"
 
-@interface NUNetworkAPI()
-    
-    @end
+@interface NUNetworkAPI()    
+@end
 
 @implementation NUNetworkAPI
     
@@ -153,8 +152,8 @@
 }
     
     
-- (void)startDownloadTaskWithSuccessHandler:(NUAPISuccessHandler)downloadSuccess
-                              failedHandler:(NUAPIFailHandler)downloadFailed
+- (void)downloadWithSuccess:(NUAPISuccessHandler)downloadSuccess
+                              failure:(NUAPIFailHandler)downloadFailed
                                    progress:(NUAPIProgressHandler)progress {
     
     self.successBlock = downloadSuccess;
@@ -164,7 +163,6 @@
     dispatch_async(dispatch_get_global_queue(0, 0), ^{
         [[NUNetworkAgent sharedNetworkAgent] sendDownloadAPIRequest:self];
     });
-    
 }
     
 - (void)suspendDownload {
@@ -175,8 +173,8 @@
     [[NUNetworkAgent sharedNetworkAgent] resumeDownloadAPIRequest:self];
 }
     
-- (void)startUploadTaskWithSuccessHandler:(NUAPISuccessHandler)downloadSuccess
-                            failedHandler:(NUAPIFailHandler)downloadFailed
+- (void)uploadWithSuccess:(NUAPISuccessHandler)downloadSuccess
+                            failure:(NUAPIFailHandler)downloadFailed
                                  progress:(NUAPIProgressHandler)progress {
     
     self.successBlock = downloadSuccess;
@@ -192,8 +190,7 @@
     
     
 #pragma mark - Transfrom
-- (nullable id)apiResponseObjReformer:(id)responseObject andError:(NSError * _Nullable)error{
-    
+- (nullable id)responseObjReformer:(id)responseObject andError:(NSError * _Nullable)error {
     if (error) { return error;}
     return responseObject;
 }

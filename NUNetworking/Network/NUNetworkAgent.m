@@ -16,12 +16,12 @@
 
 #define NU_DISPATCH_MAIN_SYNC(block)\
 if ([NSThread isMainThread]) {\
-    block();\
+block();\
 } else {\
-    dispatch_sync(dispatch_get_main_queue(), block);\
+dispatch_sync(dispatch_get_main_queue(), block);\
 }
 
-static NUNetworkAgent *sharedNetworkAgent = nil;
+static NSString *const NUNetworkErrorDomain = @"com.nunetworking.errordomain";
 
 static dispatch_queue_t api_task_single_queue() {
     static dispatch_queue_t api_task_single_queue;
@@ -32,13 +32,24 @@ static dispatch_queue_t api_task_single_queue() {
     return api_task_single_queue;
 }
 
-@interface NUNetworkAgent () {
-    AFURLSessionManager* downloadSessionManager;
+static dispatch_semaphore_t binarySemaphore() {
+    static dispatch_semaphore_t semephore;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        semephore = dispatch_semaphore_create(1);
+    });
+    
+    return semephore;
 }
+
+@interface NUNetworkAgent ()
 
 @property (nonatomic, strong) NSCache *sessionManagerCache;  //AFHTTPSessionManager cache 避免重复创建
 @property (nonatomic, strong) NSCache *sessionTasksCache;
+
 @property (nonatomic, strong) AFURLSessionManager *sessionManager;
+@property (nonatomic, strong) AFURLSessionManager *downloadSessionManager;
+
 @property (nonatomic, strong) NSURLSessionConfiguration *defaultSessionCofig;
 @property (nonatomic, strong) NSURLSessionConfiguration *backgroundSessionCofig;
 
@@ -50,7 +61,13 @@ static dispatch_queue_t api_task_single_queue() {
 @implementation NUNetworkAgent
 
 #pragma mark - Init
+
++ (void)jsonValidatorDebugOpen:(BOOL)isOpen {
+    [NUJSONValidator debugOpen:isOpen];
+}
+
 + (NUNetworkAgent *)sharedNetworkAgent {
+    static NUNetworkAgent *sharedNetworkAgent = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         sharedNetworkAgent = [[self alloc] init];
@@ -59,10 +76,8 @@ static dispatch_queue_t api_task_single_queue() {
 }
 
 - (instancetype)init {
-    if (!sharedNetworkAgent) {
-        
-        sharedNetworkAgent = [super init];
-        sharedNetworkAgent.configuration = [[NUNetworkConfig alloc] init];
+    self = [super init];
+    if (self) {
         
         self.defaultSessionCofig = [NSURLSessionConfiguration defaultSessionConfiguration];
         self.defaultSessionCofig.HTTPMaximumConnectionsPerHost = MAX_HTTP_CONNECTION_PER_HOST;
@@ -73,11 +88,8 @@ static dispatch_queue_t api_task_single_queue() {
         self.downloadQueue.name = @"com.nuclear.NUNetworking";
         self.configuration = [NUNetworkConfig sharedInstance];
     }
-    return sharedNetworkAgent;
-}
-
-+ (void)jsonValidatorDebugOpen:(BOOL)isOpen {
-    [NUJSONValidator debugOpen:isOpen];
+    
+    return self;
 }
 
 #pragma mark - Lazy load
@@ -103,6 +115,62 @@ static dispatch_queue_t api_task_single_queue() {
     return _runningDownlodCache;
 }
 
+#pragma mark -  AFHTTPSessionManager
+
+- (AFHTTPSessionManager *)sessionManagerWithAPI:(NUNetworkAPI *)api {
+    NSParameterAssert(api);
+    
+    // Request
+    AFHTTPRequestSerializer *requestSerializer = [self requestSerializerForAPI:api];
+    if (!requestSerializer) {
+        // Serializer Error, just return;
+        return nil;
+    }
+    
+    // Response
+    AFHTTPResponseSerializer *responseSerializer = [self responseSerializerForAPI:api];
+    if (!responseSerializer) {
+        return nil;
+    }
+    
+    NSString *baseUrlStr = [self requestUrlStringWithAPI:api];
+    if (baseUrlStr.length == 0) return nil;
+    
+    // AFHTTPSession
+
+    AFHTTPSessionManager *sessionManager = [self cachedSessionManagerForAPI:api];
+    if (!sessionManager) {
+        NSURLSessionConfiguration *sessionConfig = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+        if (self.configuration) {
+            sessionConfig.HTTPMaximumConnectionsPerHost = self.configuration.maxHttpConnectionPerHost;
+        } else {
+            sessionConfig.HTTPMaximumConnectionsPerHost = MAX_HTTP_CONNECTION_PER_HOST;
+        }
+
+        sessionManager = [[AFHTTPSessionManager alloc] initWithBaseURL:[NSURL URLWithString:baseUrlStr]
+                                                  sessionConfiguration:sessionConfig];
+        [self recordSessionManager:sessionManager forAPI:api];
+    }
+    
+    sessionManager.requestSerializer     = requestSerializer;
+    sessionManager.responseSerializer    = responseSerializer;
+    sessionManager.securityPolicy        = [self securityPolicyWithAPI:api];
+    
+    return sessionManager;
+}
+
+#pragma mark - security policy
+- (AFSecurityPolicy *)securityPolicyWithAPI:(NUNetworkAPI *)api {
+    NUSecurityPolicy *nu_securityPolicy = api.apiSecurityPolicy;
+    NSUInteger pinningMode = nu_securityPolicy.SSLPinningMode;
+    AFSecurityPolicy *af_securityPolicy = [AFSecurityPolicy policyWithPinningMode:pinningMode];
+    af_securityPolicy.allowInvalidCertificates = nu_securityPolicy.allowInvalidCertificates;
+    af_securityPolicy.validatesDomainName = nu_securityPolicy.validatesDomainName;
+    af_securityPolicy.pinnedCertificates = nu_securityPolicy.pinnedCertificates;
+    
+    return af_securityPolicy;
+}
+
 #pragma mark - Serializer
 - (AFHTTPRequestSerializer *)requestSerializerForAPI:(NUNetworkAPI *)api {
     NSParameterAssert(api);
@@ -121,7 +189,7 @@ static dispatch_queue_t api_task_single_queue() {
             requestSerializer = [AFHTTPRequestSerializer serializer];
             break;
     }
-
+    
     requestSerializer.cachePolicy = [api requestCachePolicy];
     [requestSerializer willChangeValueForKey:@"timeoutInterval"];
     requestSerializer.timeoutInterval = [api timeoutInterval];
@@ -132,13 +200,14 @@ static dispatch_queue_t api_task_single_queue() {
     if (![[requestHeaderFieldParams allKeys] containsObject:@"User-Agent"] && self.configuration.userAgent) {
         [requestSerializer setValue:self.configuration.userAgent forHTTPHeaderField:@"User-Agent"];
     }
-
+    
     if (requestHeaderFieldParams) {
         [requestHeaderFieldParams enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL* stop) {
             [requestSerializer setValue:obj forHTTPHeaderField:key];
         }];
     }
     requestSerializer.HTTPShouldUsePipelining = YES;
+    
     return requestSerializer;
 }
 
@@ -168,10 +237,11 @@ static dispatch_queue_t api_task_single_queue() {
             responseSerializer.acceptableContentTypes = [api responseAcceptableContentTypes];
             break;
     }
+    
     return responseSerializer;
 }
 
-#pragma mark - Request
+#pragma mark - Request config
 
 // 请求开始
 - (NSString *)requestUrlStringWithAPI:(NUNetworkAPI *)api {
@@ -182,14 +252,12 @@ static dispatch_queue_t api_task_single_queue() {
     if (![api isKindOfClass:[NUNetworkAPI class]]) return nil;
     
     NSString *requestUrl;
-
     if (baseURL.length>0) {
         requestUrl = baseURL;
-    }
-    else{
+    } else {
         requestUrl = [NSString stringWithFormat:@"%@%@",self.configuration.hostStr,[api requestPathUrl]];
     }
-
+    
     return requestUrl;
 }
 
@@ -199,61 +267,7 @@ static dispatch_queue_t api_task_single_queue() {
     return [api parameters];
 }
 
-#pragma mark -  AFHTTPSessionManager
-
-- (AFHTTPSessionManager *)sessionManagerWithAPI:(NUNetworkAPI *)api {
-    NSParameterAssert(api);
-    
-    // Request
-    AFHTTPRequestSerializer *requestSerializer = [self requestSerializerForAPI:api];
-    if (!requestSerializer) {
-        // Serializer Error, just return;
-        return nil;
-    }
-    
-    // Response
-    AFHTTPResponseSerializer *responseSerializer = [self responseSerializerForAPI:api];
-    
-    NSString *baseUrlStr = [self requestUrlStringWithAPI:api];
-    if (baseUrlStr.length == 0) return nil;
-    
-    // AFHTTPSession
-    NSString *key = [NSString stringWithFormat:@"%d", [api hash]];
-    AFHTTPSessionManager *sessionManager;
-    sessionManager = [self.sessionManagerCache objectForKey:api];
-    if (!sessionManager) {
-        NSURLSessionConfiguration *sessionConfig = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-        if (self.configuration) {
-            sessionConfig.HTTPMaximumConnectionsPerHost = self.configuration.maxHttpConnectionPerHost;
-        }
-        else
-        {
-            sessionConfig.HTTPMaximumConnectionsPerHost = MAX_HTTP_CONNECTION_PER_HOST;
-        }
-        sessionManager = [[AFHTTPSessionManager alloc] initWithBaseURL:[NSURL URLWithString:baseUrlStr]
-                                                  sessionConfiguration:sessionConfig];
-        [self.sessionManagerCache setObject:sessionManager forKey:baseUrlStr];
-    }
-    
-    sessionManager.requestSerializer     = requestSerializer;
-    sessionManager.responseSerializer    = responseSerializer;
-    sessionManager.securityPolicy        = [self securityPolicyWithAPI:api];
-    
-    return sessionManager;
-}
-
-- (AFSecurityPolicy *)securityPolicyWithAPI:(NUNetworkAPI *)api {
-    NUSecurityPolicy *NU_securityPolicy = api.apiSecurityPolicy;
-    NSUInteger pinningMode                  = NU_securityPolicy.SSLPinningMode;
-    AFSecurityPolicy *af_securityPolicy        = [AFSecurityPolicy policyWithPinningMode:pinningMode];
-    af_securityPolicy.allowInvalidCertificates = NU_securityPolicy.allowInvalidCertificates;
-    af_securityPolicy.validatesDomainName      = NU_securityPolicy.validatesDomainName;
-    af_securityPolicy.pinnedCertificates       = NU_securityPolicy.pinnedCertificates;
-    
-    return af_securityPolicy;
-}
-
-#pragma mark - Response
+#pragma mark - Response call back
 // 成功回调
 - (void)handleSuccWithResponse:(id)responseObject andAPI:(NUNetworkAPI *)api {
     [self callAPICompletion:api obj:responseObject error:nil];
@@ -278,20 +292,21 @@ static dispatch_queue_t api_task_single_queue() {
                     error:(NSError *)error{
     
     if (error) {
-        
         NU_DISPATCH_MAIN_SYNC(^{
             !api.failureBlock ?: api.failureBlock(error);
         });
-
         return;
     }
     
-    obj = [api apiResponseObjReformer:obj andError:error];
+    obj = [api responseObjReformer:obj andError:error];
     NSDictionary *validator = [api jsonValiator];
     if (validator) {
-        BOOL isJsonValiat = [NUJSONValidator checkJSON:obj withValidator:validator];
-        if (!isJsonValiat) {
-            NSError *jsonError = [[NSError alloc] initWithDomain:NSCocoaErrorDomain code:-100 userInfo:@{@"message":@"jsondata is illegal"}];
+        BOOL isJsonValid = [NUJSONValidator checkJSON:obj withValidator:validator];
+        if (!isJsonValid) {
+            NSDictionary *info = @{
+                                   @"message" : @"jsondata is illegal"
+                                   };
+            NSError *jsonError = [NSError errorWithDomain:NUNetworkErrorDomain code:NUNetworkJSONError userInfo:info];
             NU_DISPATCH_MAIN_SYNC(^{
                 !api.failureBlock ?: api.failureBlock(jsonError);
             });
@@ -303,21 +318,19 @@ static dispatch_queue_t api_task_single_queue() {
         NU_DISPATCH_MAIN_SYNC(^{
             !api.successBlock ?: api.successBlock(obj);
         });
-    }
-    else{
+    } else {
         NUNetworkLog(@"api request fail,\n api:%@,error=%@", api,obj);
         NU_DISPATCH_MAIN_SYNC(^{
             !api.failureBlock ?: api.failureBlock(obj);
         });
     }
+    
     [api clearCompletionBlock];
 }
 
 #pragma mark - Send Batch Requests
 - (void)sendBatchAPIRequests:(nonnull NUBatchRequestAPI *)apis {
     NSParameterAssert(apis);
-
-    self.configuration = [NUNetworkConfig sharedInstance];
     
     dispatch_group_t batch_api_group = dispatch_group_create();
     __weak typeof(self) weakSelf = self;
@@ -346,7 +359,7 @@ static dispatch_queue_t api_task_single_queue() {
 #pragma mark - Send Request
 - (void)sendAPIRequest:(nonnull NUNetworkAPI *)api {
     NSParameterAssert(api);
-
+    
     NSAssert(self.configuration, @"Configuration Can not be nil");
     
     //此处使用串行队列，避免同时请求api导致竞争
@@ -361,7 +374,7 @@ static dispatch_queue_t api_task_single_queue() {
 
 - (void)cancelAPIRequest:(nonnull NUNetworkAPI *)api {
     dispatch_async(api_task_single_queue(), ^{
-
+        
         [self deleteAPICache:api];
         [self deleteRunningDownloadOperationForAPI:api];
         [api.sessionTask cancel];
@@ -384,9 +397,10 @@ static dispatch_queue_t api_task_single_queue() {
     NSString *requestUrlStr = [self requestUrlStringWithAPI:api];
     id requestParams        = [self requestParamsWithAPI:api];
     
+    // 判断是否重复发起
     if ([self.sessionTasksCache objectForKey:@([api hash])]) {
         NSDictionary *userInfo = @{NSLocalizedFailureReasonErrorKey : @(NUErrorTypeFrequentRequest)};
-        NSError *cancelError = [NSError errorWithDomain:NSURLErrorDomain
+        NSError *cancelError = [NSError errorWithDomain:NUNetworkErrorDomain
                                                    code:NSURLErrorCancelled
                                                userInfo:userInfo];
         
@@ -397,14 +411,15 @@ static dispatch_queue_t api_task_single_queue() {
         }
         return;
     }
-	//网络是否连接
+    
+    //网络无连接，不发起请求
     BOOL isReachable = [self isNetworkRechabilityInHost:sessionManager.baseURL.host];
     if (!isReachable) {
         NUNetworkLog(@"network is unreachable");
         NSDictionary *userInfo = @{
                                    NSLocalizedFailureReasonErrorKey : @(NUErrorTypeNetworkUnReachable)
                                    };
-        NSError *networkUnreachableError = [NSError errorWithDomain:NSURLErrorDomain
+        NSError *networkUnreachableError = [NSError errorWithDomain:NUNetworkErrorDomain
                                                                code:NSURLErrorCannotConnectToHost
                                                            userInfo:userInfo];
         [self callAPICompletion:api obj:nil error:networkUnreachableError];
@@ -413,7 +428,6 @@ static dispatch_queue_t api_task_single_queue() {
         }
         return;
     }
-    
     
     //成功回调
     void (^successBlock)(NSURLSessionDataTask *task, id responseObject)
@@ -429,16 +443,14 @@ static dispatch_queue_t api_task_single_queue() {
         if (completionGroup) {
             dispatch_group_leave(completionGroup);
         }
-        
     };
     //失败回调
     void (^failureBlock)(NSURLSessionDataTask * task, NSError * error)
     = ^(NSURLSessionDataTask * task, NSError * error) {
-
+        
         if (self.configuration.isNetworkingActivityIndicatorEnabled) {
             [[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:NO];
         }
-        
         
         [self handleFailureWithError:error andAPI:api];
         [self deleteAPICache:api];
@@ -454,106 +466,87 @@ static dispatch_queue_t api_task_single_queue() {
         }
         !api.progressBlock ?: api.progressBlock(progress);
     };
-    
-    //    void (^apiProgressBlock)(NSProgress* progress)
-    //        = api.apiProgressBlock ? ^(NSProgress* progress) {
-    //              if (progress.totalUnitCount <= 0) {
-    //                  return;
-    //              }
-    //            // crash#78修复，避免block执行时已被释放
-    //            !api.apiProgressBlock ?: api.apiProgressBlock(progress);
-    //          }
-    //                               : nil;
-
-
-//    NUNetworkLog(@"api request will be sent,\n api:%@", api);
-    if ([[NSThread currentThread] isMainThread]) {
+    NU_DISPATCH_MAIN_SYNC(^{
         [api requestWillBeSent];
-    }
-    else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [api requestWillBeSent];
-        });
-    }
-
+    });
+    
     if (self.configuration.isNetworkingActivityIndicatorEnabled) {
         [[UIApplication sharedApplication] setNetworkActivityIndicatorVisible:YES];
     }
-
+    
     NSURLSessionDataTask* dataTask;
     switch ([api requestMethodType]) {
-    case NURequestMethodTypeGET: {
-        dataTask = [sessionManager GET:requestUrlStr
-                            parameters:requestParams
-                              progress:apiProgressBlock
-                               success:successBlock
-                               failure:failureBlock];
-    } break;
-    case NURequestMethodTypeDELETE: {
-        dataTask = [sessionManager DELETE:requestUrlStr parameters:requestParams success:successBlock failure:failureBlock];
-    } break;
-    case NURequestMethodTypePATCH: {
-        dataTask = [sessionManager PATCH:requestUrlStr parameters:requestParams success:successBlock failure:failureBlock];
-    } break;
-    case NURequestMethodTypePUT: {
-        dataTask = [sessionManager PUT:requestUrlStr parameters:requestParams success:successBlock failure:failureBlock];
-    } break;
-    case NURequestMethodTypeHEAD: {
-        dataTask = [sessionManager HEAD:requestUrlStr
-                             parameters:requestParams
-                                success:^(NSURLSessionDataTask* _Nonnull task) {
-                                    if (successBlock) {
-                                        successBlock(task, nil);
-                                    }
-                                }
-                                failure:failureBlock];
-    } break;
-    case NURequestMethodTypePOST: {
-        if (![api apiRequestConstructingBodyBlock]) {
-            dataTask =
-                [sessionManager POST:requestUrlStr
-                          parameters:requestParams
-                            progress:apiProgressBlock
-                             success:successBlock
-                             failure:failureBlock];
+        case NURequestMethodTypeGET: {
+            dataTask = [sessionManager GET:requestUrlStr
+                                parameters:requestParams
+                                  progress:apiProgressBlock
+                                   success:successBlock
+                                   failure:failureBlock];
         }
-        else {
-            void (^block)(id<AFMultipartFormData> formData)
-                = ^(id<AFMultipartFormData> formData) {
-                      api.apiRequestConstructingBodyBlock((id<NUMultipartFormData>)formData);
-                  };
-            dataTask =
-                [sessionManager POST:requestUrlStr
+            break;
+        case NURequestMethodTypePOST: {
+            if (![api apiRequestConstructingBodyBlock]) {
+                dataTask = [sessionManager POST:requestUrlStr
+                                     parameters:requestParams
+                                       progress:apiProgressBlock
+                                        success:successBlock
+                                        failure:failureBlock];
+            } else {
+                void (^block)(id<AFMultipartFormData> formData) = ^(id<AFMultipartFormData> formData) {
+                    api.apiRequestConstructingBodyBlock((id<NUMultipartFormData>)formData);
+                };
+                dataTask = [sessionManager POST:requestUrlStr
+                                     parameters:requestParams
+                      constructingBodyWithBlock:block
+                                       progress:apiProgressBlock
+                                        success:successBlock
+                                        failure:failureBlock];
+            }
+            
+        }
+            break;
+        case NURequestMethodTypeHEAD: {
+            dataTask = [sessionManager HEAD:requestUrlStr
+                                 parameters:requestParams
+                                    success:^(NSURLSessionDataTask* _Nonnull task) {
+                                        if (successBlock) {
+                                            successBlock(task, nil);
+                                        }
+                                    }
+                                    failure:failureBlock];
+        }
+            break;
+        case NURequestMethodTypePUT: {
+            dataTask = [sessionManager PUT:requestUrlStr
+                                parameters:requestParams
+                                   success:successBlock
+                                   failure:failureBlock];
+        }
+            break;
+        case NURequestMethodTypePATCH: {
+            dataTask = [sessionManager PATCH:requestUrlStr
+                                  parameters:requestParams
+                                     success:successBlock
+                                     failure:failureBlock];
+        }
+            break;
+        case NURequestMethodTypeDELETE: {
+            dataTask = [sessionManager DELETE:requestUrlStr
                                    parameters:requestParams
-                    constructingBodyWithBlock:block
-                                     progress:apiProgressBlock
                                       success:successBlock
                                       failure:failureBlock];
         }
-
-    } break;
-    default:
-        dataTask = [sessionManager GET:requestUrlStr
-                            parameters:requestParams
-                              progress:apiProgressBlock
-                               success:successBlock
-                               failure:failureBlock];
-        break;
+            break;
     }
+    
     if (dataTask) {
         api.sessionTask = dataTask;
         [self recordAPICache:api];
     }
-
-   // NUNetworkLog(@"api request did sent,\n api:%@", api);
-    if ([[NSThread currentThread] isMainThread]) {
+    
+    NU_DISPATCH_MAIN_SYNC(^{
         [api requestDidSent];
-    }
-    else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [api requestDidSent];
-        });
-    }
+    })
 }
 
 #pragma mark - download
@@ -566,7 +559,7 @@ static dispatch_queue_t api_task_single_queue() {
     }
     
     dispatch_async(api_task_single_queue(), ^{
-    
+        
         //TODO: 需要设定缓存时间
         //指定路径下文件已存在不下载，直接回调
         NSFileManager *manager = [NSFileManager defaultManager];
@@ -601,37 +594,6 @@ static dispatch_queue_t api_task_single_queue() {
         [self.downloadQueue addOperation:operation];
         [self recordRunningDownloadOperation:operation forAPI:api];
     });
-    
-    /*
-    dispatch_async(api_task_single_queue(), ^{
-        //TODO: 需要设定缓存时间
-        //指定路径下文件已存在不下载，直接回调
-        NSFileManager* manager = [NSFileManager defaultManager];
-        if ([manager fileExistsAtPath:api.apiDownloadPath]) {
-            NUNetworkLog(@"have a same file in local, file path:%@", api.apiDownloadPath);
-            api.successCompletionBlock ? api.successCompletionBlock([NSURL URLWithString:api.apiDownloadPath]) : nil;
-            return;
-        }
-
-        NSString* method = [self methodNameWithType:api.apiRequestMethodType];
-
-        NSURLSessionConfiguration* sessionConfiguration = [self sessionConfigurationWithAPI:api];
-        //[self invalidateSessionManager];
-        downloadSessionManager = [[AFURLSessionManager alloc] initWithSessionConfiguration:sessionConfiguration];
-        AFHTTPRequestSerializer* requestSerializer = [self requestSerializerForAPI:api];
-
-        NSError* serializerError;
-        NSMutableURLRequest* downloadReq = [requestSerializer requestWithMethod:method URLString:api.baseUrl parameters:api.requestParameters error:&serializerError];
-        if (serializerError) {
-            NUNetworkLog(@"download requestserializer error: %@", serializerError);
-            api.failureCompletionBlock ? api.failureCompletionBlock(serializerError) : nil;
-            return;
-        }
-
-        NUNetworkLog(@"download url: %@", downloadReq.URL.absoluteString);
-        [self p_resumeDownloadTaskForAPI:api withSessionManager:downloadSessionManager request:downloadReq resumeData:nil];
-    });
-    */
 }
 
 - (void)suspendDownloadAPIRequest:(NUNetworkAPI *)api {
@@ -644,7 +606,7 @@ static dispatch_queue_t api_task_single_queue() {
     [self deleteAPICache:api];
     NSURLSessionDownloadTask* task = (NSURLSessionDownloadTask*)api.sessionTask;
     [task cancelByProducingResumeData:^(NSData* _Nullable resumeData) {
-
+        
         NSString *tempPath = [self tempDownloadPathForRequestAPI:api];
         NSFileManager* manager = [NSFileManager defaultManager];
         if ([manager fileExistsAtPath:tempPath]) {
@@ -657,7 +619,7 @@ static dispatch_queue_t api_task_single_queue() {
 - (void)resumeDownloadAPIRequest:(NUNetworkAPI *)api {
     
     if (api.sessionTask.state == NSURLSessionTaskStateRunning) {
-         NUNetworkLog(@"api task is still running");
+        NUNetworkLog(@"api task is still running");
         return;
     }
     
@@ -665,7 +627,7 @@ static dispatch_queue_t api_task_single_queue() {
     NSData *data = [NSData dataWithContentsOfFile:[self tempDownloadPathForRequestAPI:api] options:0 error:&error];
     [[NSFileManager defaultManager] removeItemAtPath:[self tempDownloadPathForRequestAPI:api]  error:nil];
     if (error) {
-         NUNetworkLog(@"fetch resume data failed");
+        NUNetworkLog(@"fetch resume data failed");
         api.failureBlock ? api.failureBlock(error) : nil;
         return;
     }
@@ -696,7 +658,7 @@ static dispatch_queue_t api_task_single_queue() {
         NSDictionary *userInfo = @{
                                    NSLocalizedFailureReasonErrorKey : @(NUErrorTypeNetworkUnReachable)
                                    };
-        NSError *networkUnreachableError = [NSError errorWithDomain:NSURLErrorDomain
+        NSError *networkUnreachableError = [NSError errorWithDomain:NUNetworkErrorDomain
                                                                code:NSURLErrorCannotConnectToHost
                                                            userInfo:userInfo];
         [self callAPICompletion:api obj:nil error:networkUnreachableError];
@@ -714,14 +676,11 @@ static dispatch_queue_t api_task_single_queue() {
     void (^completionHandler)(NSURLResponse* response, NSURL* filePath, NSError* error) = ^(NSURLResponse* response, NSURL* filePath, NSError* error) {
         if ([error.domain isEqualToString:NSURLErrorDomain] && error.code == NSURLErrorCancelled) {
             api.failureBlock ? api.failureBlock(error) : nil;
-            //[self invalidateSessionManager];
             return;
         }
         [self handleSuccWithResponse:filePath andAPI:api];
         [self deleteAPICache:api];
         [self deleteRunningDownloadOperationForAPI:api];
-        
-        //[self invalidateSessionManager];
     };
     
     NSURLSessionDownloadTask *downloadTask;
@@ -731,27 +690,22 @@ static dispatch_queue_t api_task_single_queue() {
                                                       progress:downloadProgressBlock
                                                    destination:destination
                                              completionHandler:completionHandler];
-    }
-    else if (data) {
+    } else if (data) {
         NUNetworkLog(@"resume download");
         downloadTask = [sessionManager downloadTaskWithResumeData:data
                                                          progress:downloadProgressBlock
                                                       destination:destination
                                                 completionHandler:completionHandler];
     }
-
+    
     api.sessionTask = downloadTask;
     [self recordAPICache:api];
     [downloadTask resume];
     sessionManager = nil;
-    if ([[NSThread currentThread] isMainThread]) {
+    
+    NU_DISPATCH_MAIN_SYNC(^{
         [api requestDidSent];
-    }
-    else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [api requestDidSent];
-        });
-    }
+    });
 }
 
 - (NSString *)tempDownloadPathForRequestAPI:(NUNetworkAPI *)api {
@@ -760,21 +714,9 @@ static dispatch_queue_t api_task_single_queue() {
 }
 
 - (void)invalidateSessionManager {
-    /*
-     *  fix bug by nuclear
-     *  https://github.com/AFNetworking/AFNetworking/issues/3546
-     *  As discussed in the NSURLSession docs:
-     *  The session object keeps a strong reference to the delegate until your app exits or explicitly invalidates the session. If you do not invalidate the session, your app leaks memory until it exits.
-     *  You must call invalidateSessionCancelingTasks: in order to properly release the session manager, since NSURLSession maintains a strong reference to its delegate.
-     **/
-//    dispatch_async(api_task_single_queue(), ^{
-//    pthread_mutex_lock(&mutex);
-        if (downloadSessionManager) {
-            [downloadSessionManager invalidateSessionCancelingTasks:YES];
-            //downloadSessionManager = nil;
-        }
-//    pthread_mutex_unlock(&mutex);
-//    });
+    if (self.downloadSessionManager) {
+        [self.downloadSessionManager invalidateSessionCancelingTasks:YES];
+    }
 }
 
 #pragma mark - upload
@@ -807,44 +749,41 @@ static dispatch_queue_t api_task_single_queue() {
     
     __autoreleasing NSError *serializerError;
     
-    void (^constructingDataBodyBlock)(id <AFMultipartFormData> formData)
-    = ^(id <AFMultipartFormData> formData) {
+    void (^constructingDataBodyBlock)(id <AFMultipartFormData> formData) = ^(id <AFMultipartFormData> formData) {
         api.apiRequestConstructingBodyBlock ? api.apiRequestConstructingBodyBlock((id<NUMultipartFormData>)formData) : nil;
     };
-    NSMutableURLRequest *uploadReq = [requestSerializer multipartFormRequestWithMethod:method URLString:api.baseUrl parameters:api.parameters constructingBodyWithBlock:constructingDataBodyBlock error:&serializerError];
+    
+    NSMutableURLRequest *uploadReq = [requestSerializer multipartFormRequestWithMethod:method
+                                                                             URLString:api.baseUrl
+                                                                            parameters:api.parameters
+                                                             constructingBodyWithBlock:constructingDataBodyBlock
+                                                                                 error:&serializerError];
     if (serializerError) {
         NUNetworkLog(@"serializerError failed, \n error: %@",serializerError);
         api.failureBlock ? api.failureBlock(serializerError) : nil;
         return;
     }
     
-    NSURLSessionUploadTask *task = [self.sessionManager uploadTaskWithStreamedRequest:uploadReq progress:^(NSProgress * _Nonnull uploadProgress) {
-
+    NSURLSessionUploadTask *task =
+    [self.sessionManager uploadTaskWithStreamedRequest:uploadReq progress:^(NSProgress * _Nonnull uploadProgress) {
         api.progressBlock ? api.progressBlock(uploadProgress) : nil;
-    }
-        completionHandler:^(NSURLResponse* _Nonnull response, id _Nullable responseObject, NSError* _Nullable error) {
-            if (error) {
-                NUNetworkLog(@"upload task failed, \n error: %@", error);
-                api.failureBlock ? api.failureBlock(error) : nil;
-                return;
-            }
-//            NUNetworkLog(@"upload task succeess");
-            api.successBlock ? api.successBlock(responseObject) : nil;
-        }];
-
+    } completionHandler:^(NSURLResponse* _Nonnull response, id _Nullable responseObject, NSError* _Nullable error) {
+        if (error) {
+            NUNetworkLog(@"upload task failed, \n error: %@", error);
+            api.failureBlock ? api.failureBlock(error) : nil;
+            return;
+        }
+        api.successBlock ? api.successBlock(responseObject) : nil;
+    }];
+    
     api.sessionTask = task;
     [self recordAPICache:api];
     NUNetworkLog(@"start upload task");
     [task resume];
-
-    if ([[NSThread currentThread] isMainThread]) {
+    
+    NU_DISPATCH_MAIN_SYNC(^{
         [api requestDidSent];
-    }
-    else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [api requestDidSent];
-        });
-    }
+    });
 }
 
 #pragma mark - configure
@@ -854,9 +793,9 @@ static dispatch_queue_t api_task_single_queue() {
     SCNetworkReachabilityRef hostReachable = SCNetworkReachabilityCreateWithName(NULL, [host UTF8String]);
     SCNetworkReachabilityFlags flags;
     BOOL success = SCNetworkReachabilityGetFlags(hostReachable, &flags);
-
+    
     bool isReachable = success && (flags & kSCNetworkFlagsReachable) && !(flags & kSCNetworkFlagsConnectionRequired);
-
+    
     if (hostReachable) {
         CFRelease(hostReachable);
     }
@@ -866,7 +805,7 @@ static dispatch_queue_t api_task_single_queue() {
 
 - (void)sessionConfigurationWithAPI:(NUNetworkAPI *)api {
     if ([api supportBackgroundTask]) {
-        NSString *identifier = [self requestAPIHashKey:api];
+        NSString *identifier = [self backgroundTaskIdentityForAPI:api];
         self.backgroundSessionCofig = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:identifier];
         self.backgroundSessionCofig.sessionSendsLaunchEvents = YES;
         self.backgroundSessionCofig.discretionary = YES;
@@ -880,33 +819,66 @@ static dispatch_queue_t api_task_single_queue() {
     }
 }
 
-- (NSString *)requestAPIHashKey:(NUNetworkAPI *)api {
+- (NSString *)backgroundTaskIdentityForAPI:(NUNetworkAPI *)api {
     NSString *hashKey = [NSString stringWithFormat:@"com.NUNetworking.%lu",(unsigned long)[api hash]];
-     NUNetworkLog(@"request hash key : %@", hashKey);
     return hashKey;
 }
 
 #pragma mark - record data
+#pragma mark session manager cache
+- (AFHTTPSessionManager *)cachedSessionManagerForAPI:(NUNetworkAPI *)api {
+    __block AFHTTPSessionManager *sessionManager;
+    [self safetyAction:^{
+        NSString *key = [self keyForSessionManagerWithAPI:api];
+        sessionManager = [self.sessionManagerCache objectForKey:key];
+    }];
+    
+    return sessionManager;
+}
 
 - (void)removeSessionManagerForAPI:(NUNetworkAPI *)api {
     
-    NSString *key = [self requestUrlStringWithAPI:api];
-    AFHTTPSessionManager *sessionManager = [self.sessionManagerCache objectForKey:key];
+    AFHTTPSessionManager *sessionManager = [self cachedSessionManagerForAPI:api];
     if (!sessionManager) return;
     
     [sessionManager invalidateSessionCancelingTasks:YES];
-    [self.sessionManagerCache removeObjectForKey:key];
+    [self safetyAction:^{
+        NSString *key = [self keyForSessionManagerWithAPI:api];
+        [self.sessionManagerCache removeObjectForKey:key];
+    }];
 }
 
+- (void)recordSessionManager:(AFURLSessionManager *)manager forAPI:(NUNetworkAPI *)api {
+    [self safetyAction:^{
+        NSString *key = [self keyForSessionManagerWithAPI:api];
+        [self.sessionManagerCache setObject:manager forKey:key];
+    }];
+}
+
+- (NSString *)keyForSessionManagerWithAPI:(NUNetworkAPI *)api {
+    return [NSString stringWithFormat:@"com.nunetwork.sessionmanagerKey.%lu", (unsigned long)[api hash]];
+}
+
+#pragma mark session task cache
 - (void)recordAPICache:(NUNetworkAPI *)api {
-     //NUNetworkLog(@"taskidentifer : %lu",(unsigned long)api.hash);
-    [self.sessionTasksCache setObject:api.sessionTask forKey:@(api.hash)];
+    [self safetyAction:^{
+        NSString *key = [self keyForSessionTaskWithAPI:api];
+        [self.sessionTasksCache setObject:api.sessionTask forKey:key];
+    }];
 }
 
 - (void)deleteAPICache:(NUNetworkAPI *)api  {
     if (!api) return;
-    [self.sessionTasksCache removeObjectForKey:@(api.hash)];
+    [self safetyAction:^{
+        NSString *key = [self keyForSessionTaskWithAPI:api];
+        [self.sessionTasksCache removeObjectForKey:key];
+    }];
 }
+
+- (NSString *)keyForSessionTaskWithAPI:(NUNetworkAPI *)api {
+    return [NSString stringWithFormat:@"com.nunetwork.taskKey.%lu", (unsigned long)[api hash]];
+}
+
 
 - (void)recordRunningDownloadOperation:(NSOperation *)operation forAPI:(NUNetworkAPI *)api {
     [self.runningDownlodCache setObject:operation forKey:@(api.hash)];
@@ -947,6 +919,12 @@ static dispatch_queue_t api_task_single_queue() {
     }
     
     return method;
+}
+
+- (void)safetyAction:(void (^)())action {
+    dispatch_semaphore_wait(binarySemaphore(), DISPATCH_TIME_FOREVER);
+    !action ?: action();
+    dispatch_semaphore_signal(binarySemaphore());
 }
 
 @end

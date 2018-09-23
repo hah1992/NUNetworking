@@ -22,6 +22,7 @@
 		0C0DCA9F2155FA1C00CD4610 /* NUReachability.m in Sources */ = {isa = PBXBuildFile; fileRef = 0C0DCA912155FA1C00CD4610 /* NUReachability.m */; };
 		0C0DCAA02155FA1C00CD4610 /* NUNetworkLog.m in Sources */ = {isa = PBXBuildFile; fileRef = 0C0DCA932155FA1C00CD4610 /* NUNetworkLog.m */; };
 		0C0DCAA12155FA1C00CD4610 /* NUJSONValidator.m in Sources */ = {isa = PBXBuildFile; fileRef = 0C0DCA982155FA1C00CD4610 /* NUJSONValidator.m */; };
+		0CBC3B06215764B50083B46A /* TestAPI.m in Sources */ = {isa = PBXBuildFile; fileRef = 0CBC3B05215764B50083B46A /* TestAPI.m */; };
 		A7F3EB5458C3317C4B929B3A /* libPods-NUNetworking.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E67BF662C707928F90AA33F1 /* libPods-NUNetworking.a */; };
 /* End PBXBuildFile section */
 
@@ -57,6 +58,8 @@
 		0C0DCA962155FA1C00CD4610 /* NUNetworkAgent.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NUNetworkAgent.h; sourceTree = "<group>"; };
 		0C0DCA972155FA1C00CD4610 /* NUSecurityPolicy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NUSecurityPolicy.h; sourceTree = "<group>"; };
 		0C0DCA982155FA1C00CD4610 /* NUJSONValidator.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NUJSONValidator.m; sourceTree = "<group>"; };
+		0CBC3B04215764B50083B46A /* TestAPI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TestAPI.h; sourceTree = "<group>"; };
+		0CBC3B05215764B50083B46A /* TestAPI.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TestAPI.m; sourceTree = "<group>"; };
 		191FC8EDD5FB79551461472A /* Pods-NUNetworking.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NUNetworking.debug.xcconfig"; path = "Pods/Target Support Files/Pods-NUNetworking/Pods-NUNetworking.debug.xcconfig"; sourceTree = "<group>"; };
 		E67BF662C707928F90AA33F1 /* libPods-NUNetworking.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-NUNetworking.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -98,6 +101,8 @@
 				0C0DCA6D2155F9DB00CD4610 /* AppDelegate.m */,
 				0C0DCA6F2155F9DB00CD4610 /* ViewController.h */,
 				0C0DCA702155F9DB00CD4610 /* ViewController.m */,
+				0CBC3B04215764B50083B46A /* TestAPI.h */,
+				0CBC3B05215764B50083B46A /* TestAPI.m */,
 				0C0DCA722155F9DB00CD4610 /* Main.storyboard */,
 				0C0DCA752155F9DB00CD4610 /* Assets.xcassets */,
 				0C0DCA772155F9DB00CD4610 /* LaunchScreen.storyboard */,
@@ -111,12 +116,12 @@
 		0C0DCA822155FA1C00CD4610 /* Network */ = {
 			isa = PBXGroup;
 			children = (
+				0C0DCA862155FA1C00CD4610 /* NUNetwork.h */,
 				0C0DCA832155FA1C00CD4610 /* NUNetworkConfig.h */,
 				0C0DCA8B2155FA1C00CD4610 /* NUNetworkConfig.m */,
 				0C0DCA842155FA1C00CD4610 /* NUNetworkDefines.h */,
 				0C0DCA852155FA1C00CD4610 /* NUBatchRequestAPI.h */,
 				0C0DCA8C2155FA1C00CD4610 /* NUBatchRequestAPI.m */,
-				0C0DCA862155FA1C00CD4610 /* NUNetwork.h */,
 				0C0DCA962155FA1C00CD4610 /* NUNetworkAgent.h */,
 				0C0DCA872155FA1C00CD4610 /* NUNetworkAgent.m */,
 				0C0DCA952155FA1C00CD4610 /* NUNetworkAPI.h */,
@@ -268,6 +273,7 @@
 				0C0DCAA02155FA1C00CD4610 /* NUNetworkLog.m in Sources */,
 				0C0DCA712155F9DB00CD4610 /* ViewController.m in Sources */,
 				0C0DCA9C2155FA1C00CD4610 /* NUNetworkConfig.m in Sources */,
+				0CBC3B06215764B50083B46A /* TestAPI.m in Sources */,
 				0C0DCA9F2155FA1C00CD4610 /* NUReachability.m in Sources */,
 				0C0DCA9B2155FA1C00CD4610 /* NUSecurityPolicy.m in Sources */,
 				0C0DCA7C2155F9DB00CD4610 /* main.m in Sources */,
