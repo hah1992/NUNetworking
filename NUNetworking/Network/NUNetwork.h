@@ -8,7 +8,7 @@
 
 #import "NUNetworkDefines.h"
 #import "NUNetworkConfig.h"
-#import "NUNetworkBaseAPI.h"
+#import "NUNetworkAPI.h"
 #import "NUNetworkAgent.h"
 #import "NUBatchRequestAPI.h"
 #import "NUSecurityPolicy.h"

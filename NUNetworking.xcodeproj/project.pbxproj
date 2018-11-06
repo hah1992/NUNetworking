@@ -23,6 +23,8 @@
 		0C0DCAA02155FA1C00CD4610 /* NUNetworkLog.m in Sources */ = {isa = PBXBuildFile; fileRef = 0C0DCA932155FA1C00CD4610 /* NUNetworkLog.m */; };
 		0C0DCAA12155FA1C00CD4610 /* NUJSONValidator.m in Sources */ = {isa = PBXBuildFile; fileRef = 0C0DCA982155FA1C00CD4610 /* NUJSONValidator.m */; };
 		0CBC3B06215764B50083B46A /* TestAPI.m in Sources */ = {isa = PBXBuildFile; fileRef = 0CBC3B05215764B50083B46A /* TestAPI.m */; };
+		0CC483F12191D50400BA2019 /* TestAPI2.m in Sources */ = {isa = PBXBuildFile; fileRef = 0CC483F02191D50400BA2019 /* TestAPI2.m */; };
+		0CC483F42191DE4000BA2019 /* CityViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0CC483F32191DE4000BA2019 /* CityViewController.m */; };
 		A7F3EB5458C3317C4B929B3A /* libPods-NUNetworking.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E67BF662C707928F90AA33F1 /* libPods-NUNetworking.a */; };
 /* End PBXBuildFile section */
 
@@ -60,6 +62,10 @@
 		0C0DCA982155FA1C00CD4610 /* NUJSONValidator.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NUJSONValidator.m; sourceTree = "<group>"; };
 		0CBC3B04215764B50083B46A /* TestAPI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TestAPI.h; sourceTree = "<group>"; };
 		0CBC3B05215764B50083B46A /* TestAPI.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TestAPI.m; sourceTree = "<group>"; };
+		0CC483EF2191D50400BA2019 /* TestAPI2.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TestAPI2.h; sourceTree = "<group>"; };
+		0CC483F02191D50400BA2019 /* TestAPI2.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TestAPI2.m; sourceTree = "<group>"; };
+		0CC483F22191DE4000BA2019 /* CityViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CityViewController.h; sourceTree = "<group>"; };
+		0CC483F32191DE4000BA2019 /* CityViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CityViewController.m; sourceTree = "<group>"; };
 		191FC8EDD5FB79551461472A /* Pods-NUNetworking.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NUNetworking.debug.xcconfig"; path = "Pods/Target Support Files/Pods-NUNetworking/Pods-NUNetworking.debug.xcconfig"; sourceTree = "<group>"; };
 		E67BF662C707928F90AA33F1 /* libPods-NUNetworking.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-NUNetworking.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -103,6 +109,10 @@
 				0C0DCA702155F9DB00CD4610 /* ViewController.m */,
 				0CBC3B04215764B50083B46A /* TestAPI.h */,
 				0CBC3B05215764B50083B46A /* TestAPI.m */,
+				0CC483EF2191D50400BA2019 /* TestAPI2.h */,
+				0CC483F02191D50400BA2019 /* TestAPI2.m */,
+				0CC483F22191DE4000BA2019 /* CityViewController.h */,
+				0CC483F32191DE4000BA2019 /* CityViewController.m */,
 				0C0DCA722155F9DB00CD4610 /* Main.storyboard */,
 				0C0DCA752155F9DB00CD4610 /* Assets.xcassets */,
 				0C0DCA772155F9DB00CD4610 /* LaunchScreen.storyboard */,
@@ -274,8 +284,10 @@
 				0C0DCA712155F9DB00CD4610 /* ViewController.m in Sources */,
 				0C0DCA9C2155FA1C00CD4610 /* NUNetworkConfig.m in Sources */,
 				0CBC3B06215764B50083B46A /* TestAPI.m in Sources */,
+				0CC483F12191D50400BA2019 /* TestAPI2.m in Sources */,
 				0C0DCA9F2155FA1C00CD4610 /* NUReachability.m in Sources */,
 				0C0DCA9B2155FA1C00CD4610 /* NUSecurityPolicy.m in Sources */,
+				0CC483F42191DE4000BA2019 /* CityViewController.m in Sources */,
 				0C0DCA7C2155F9DB00CD4610 /* main.m in Sources */,
 				0C0DCA6E2155F9DB00CD4610 /* AppDelegate.m in Sources */,
 			);

@@ -8,14 +8,15 @@
 
 #import "TestAPI.h"
 
-@implementation TestAPI
+@implementation TestAPI {}
+
 - (NSString *)baseUrl {
     return @"https://www.apiopen.top/weatherApi";
 }
 
 - (id)parameters {
     return @{
-             @"city": @"北京"
+             @"city": _city ?: @""
              };
 }
 

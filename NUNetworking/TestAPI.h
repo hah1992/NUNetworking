@@ -9,5 +9,5 @@
 #import "NUNetworkAPI.h"
 
 @interface TestAPI : NUNetworkAPI
-
+@property(nonatomic, copy) NSString *city;
 @end

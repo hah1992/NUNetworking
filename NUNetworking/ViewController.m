@@ -8,31 +8,52 @@
 
 #import "ViewController.h"
 #import "TestAPI.h"
+#import "TestAPI2.h"
+#import "CityViewController.h"
 
-@interface ViewController ()
-
+@interface ViewController ()<UITableViewDelegate, UITableViewDataSource>
+@property(nonatomic, strong) NSArray *dataSource;
+@property (weak, nonatomic) IBOutlet UITableView *tableView;
 @end
 
 @implementation ViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // Do any additional setup after loading the view, typically from a nib.
+    self.title = @"城市列表";
+    _dataSource = @[
+                    @"北京",
+                    @"上海",
+                    @"深圳",
+                    @"广州",
+                    @"重庆",
+                    @"西安",
+                    ];
+    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"used"];
+    
 }
 
 
-- (void)didReceiveMemoryWarning {
-    [super didReceiveMemoryWarning];
-    // Dispose of any resources that can be recreated.
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.dataSource.count;
 }
 
-- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    [TestAPI.new startWithSuccess:^(id  _Nonnull responseObject) {
-        
-    } failure:^(NSError * _Nonnull error) {
-        
-    }];
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"used" forIndexPath:indexPath];
+    cell.textLabel.text = self.dataSource[indexPath.row];
+    return cell;
 }
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    
+    CityViewController *city = [[UIStoryboard storyboardWithName:@"Main" bundle:nil] instantiateViewControllerWithIdentifier:@"city"];
+    NSLog(@"%@", self.storyboard);
+    
+    city.city = self.dataSource[indexPath.row];
+    [self.navigationController pushViewController:city animated:YES];
+}
+
 
 
 @end

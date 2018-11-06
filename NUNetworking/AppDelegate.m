@@ -7,6 +7,7 @@
 //
 
 #import "AppDelegate.h"
+#import "NUNetwork.h"
 
 @interface AppDelegate ()
 
@@ -17,6 +18,12 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Override point for customization after application launch.
+    
+    NUNetworkConfig *configuration = [NUNetworkConfig sharedInstance];
+    configuration.hostStr = @"https://www.apiopen.top";
+    [NUNetworkAgent sharedNetworkAgent].configuration = configuration;
+    [NUNetworkAgent jsonValidatorDebugOpen:YES];
+    
     return YES;
 }
 

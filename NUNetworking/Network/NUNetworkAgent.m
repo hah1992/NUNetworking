@@ -255,7 +255,7 @@ static dispatch_semaphore_t binarySemaphore() {
     if (baseURL.length>0) {
         requestUrl = baseURL;
     } else {
-        requestUrl = [NSString stringWithFormat:@"%@%@",self.configuration.hostStr,[api requestPathUrl]];
+        requestUrl = [self.configuration.hostStr stringByAppendingPathComponent:[api requestPathUrl]];
     }
     
     return requestUrl;
@@ -392,7 +392,6 @@ static dispatch_semaphore_t binarySemaphore() {
     
     NSParameterAssert(api);
     NSParameterAssert(sessionManager);
-    
     
     NSString *requestUrlStr = [self requestUrlStringWithAPI:api];
     id requestParams        = [self requestParamsWithAPI:api];
