@@ -295,6 +295,8 @@ static dispatch_semaphore_t binarySemaphore() {
         NU_DISPATCH_MAIN_SYNC(^{
             !api.failureBlock ?: api.failureBlock(error);
         });
+        NSData *data = error.userInfo[NSURLSessionDownloadTaskResumeData];
+        [self storeResumeData:data forAPI:api];
         return;
     }
     
@@ -615,6 +617,16 @@ static dispatch_semaphore_t binarySemaphore() {
     }];
 }
 
+- (void)storeResumeData:(NSData *)resumeData forAPI:(NUNetworkAPI *)api {
+    if (!resumeData || !api) return;
+    NSString *tempPath = [self tempDownloadPathForRequestAPI:api];
+    NSFileManager* manager = [NSFileManager defaultManager];
+    if ([manager fileExistsAtPath:tempPath]) {
+        [manager removeItemAtPath:tempPath error:nil];
+    }
+    [resumeData writeToFile:tempPath atomically:YES];
+}
+
 - (void)resumeDownloadAPIRequest:(NUNetworkAPI *)api {
     
     if (api.sessionTask.state == NSURLSessionTaskStateRunning) {
@@ -638,11 +650,10 @@ static dispatch_semaphore_t binarySemaphore() {
 - (void)p_resumeDownloadWithAPI:(NUNetworkAPI *)api resumeData:(NSData *)data {
     
     [self sessionConfigurationWithAPI:api];
-    if (self.backgroundSessionCofig) {
-        self.sessionManager = [[AFURLSessionManager alloc] initWithSessionConfiguration:self.backgroundSessionCofig];
+    if (self.backgroundSessionCofig && !self.downloadSessionManager) {
+        self.downloadSessionManager = [[AFURLSessionManager alloc] initWithSessionConfiguration:self.backgroundSessionCofig];
     }
-    
-    [self p_resumeDownloadTaskForAPI:api withSessionManager:self.sessionManager request:nil resumeData:data];
+    [self p_resumeDownloadTaskForAPI:api withSessionManager:self.downloadSessionManager request:nil resumeData:data];
 }
 
 - (void)p_resumeDownloadTaskForAPI:(NUNetworkAPI *)api
@@ -691,10 +702,18 @@ static dispatch_semaphore_t binarySemaphore() {
                                              completionHandler:completionHandler];
     } else if (data) {
         NUNetworkLog(@"resume download");
-        downloadTask = [sessionManager downloadTaskWithResumeData:data
-                                                         progress:downloadProgressBlock
-                                                      destination:destination
-                                                completionHandler:completionHandler];
+        // valid the resume data and try to resume donwload
+        BOOL canResume = [self validateResumeData:data];
+        if (canResume) {
+            @try {
+                downloadTask = [sessionManager downloadTaskWithResumeData:data
+                                                                 progress:downloadProgressBlock
+                                                              destination:destination
+                                                        completionHandler:completionHandler];
+            } @catch (NSException *exception) {
+                NUNetworkLog(@"try to resume donwload exception:%@", exception);
+            }
+        }
     }
     
     api.sessionTask = downloadTask;
@@ -716,6 +735,27 @@ static dispatch_semaphore_t binarySemaphore() {
     if (self.downloadSessionManager) {
         [self.downloadSessionManager invalidateSessionCancelingTasks:YES];
     }
+}
+
+- (BOOL)validateResumeData:(NSData *)data {
+    // From http://stackoverflow.com/a/22137510/3562486
+    if (!data || [data length] < 1) return NO;
+    
+    NSError *error;
+    NSDictionary *resumeDictionary = [NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:NULL error:&error];
+    if (!resumeDictionary || error) return NO;
+    
+    // Before iOS 9 & Mac OS X 10.11
+#if (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED < 90000)\
+|| (defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED < 101100)
+    NSString *localFilePath = [resumeDictionary objectForKey:@"NSURLSessionResumeInfoLocalPath"];
+    if ([localFilePath length] < 1) return NO;
+    return [[NSFileManager defaultManager] fileExistsAtPath:localFilePath];
+#endif
+    // After iOS 9 we can not actually detects if the cache file exists. This plist file has a somehow
+    // complicated structue. Besides, the plist structure is different between iOS 9 and iOS 10.
+    // We can only assume that the plist being successfully parsed means the resume data is valid.
+    return YES;
 }
 
 #pragma mark - upload
